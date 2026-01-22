@@ -336,6 +336,7 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
             // URL not on allowlist - create dummy record with category placeholder
             recordedUrl = 'CATEGORY:NOT_ON_ALLOWLIST'
             recordedTitle = ''
+            registeredDomain = ''
             // Log debug event if enabled (dev-only)
             await this.maybeLogFilteredUrlDebug(
               item.url, 
@@ -359,9 +360,10 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
             filteredByList = filterResult.filteredByList
             filterMatch = filterResult.filterMatch
 
-            // Privacy: if we masked the URL, mask the title too.
+            // Privacy: if we masked the URL, mask the title and domain too.
             if (recordedUrl.startsWith('CATEGORY:')) {
               recordedTitle = ''
+              registeredDomain = ''
             }
           }
 
