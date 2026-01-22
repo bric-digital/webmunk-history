@@ -48,6 +48,21 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     return 'HistoryServiceWorkerModule'
   }
 
+  /**
+   * Check if user identifier has been set.
+   * History collection should not start until an identifier exists.
+   */
+  async hasIdentifier(): Promise<boolean> {
+    try {
+      const result = await chrome.storage.local.get('webmunkIdentifier')
+      const identifier = (result.webmunkIdentifier as string | undefined)?.toString().trim()
+      return Boolean(identifier)
+    } catch (error) {
+      console.error('[webmunk-history] Failed to check identifier:', error)
+      return false
+    }
+  }
+
   async setup() {
     console.log('[webmunk-history/service-worker] Setting up history collection module')
 
@@ -60,14 +75,18 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     }
 
     // React to configuration updates (e.g., after identifier is set and remote config is fetched).
-    // This ensures periodic collection turns on once history config becomes available.
+    // This ensures periodic collection turns on once history config becomes available AND identifier is set.
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return
-      if (changes.webmunkConfiguration || changes.webmunkHistoryConfiguration) {
+      if (changes.webmunkConfiguration || changes.webmunkHistoryConfiguration || changes.webmunkIdentifier) {
         this.loadConfiguration()
           .then(async () => {
-            if (this.config) {
+            const hasIdentifier = await this.hasIdentifier()
+            if (this.config && hasIdentifier) {
               await this.setupAlarm()
+              console.log('[webmunk-history] Configuration and identifier available, alarm set up')
+            } else if (this.config && !hasIdentifier) {
+              console.log('[webmunk-history] Configuration available but no identifier - waiting for identifier before starting collection')
             }
           })
           .catch((err) => {
@@ -79,10 +98,13 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     // Load configuration
     await this.loadConfiguration()
 
-    // Set up periodic collection alarm
-    if (this.config) {
+    // Set up periodic collection alarm ONLY if identifier exists
+    const hasIdentifier = await this.hasIdentifier()
+    if (this.config && hasIdentifier) {
       await this.setupAlarm()
       console.log(`[webmunk-history] Alarm set for every ${this.config.collection_interval_minutes} minutes`)
+    } else if (this.config && !hasIdentifier) {
+      console.log('[webmunk-history] Configuration loaded but no identifier set - collection will start once identifier is provided')
     }
 
     // Set up alarm listener
@@ -224,6 +246,13 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
   async collectHistory() {
     if (this.status.isCollecting) {
       console.log('[webmunk-history] Collection already in progress, skipping')
+      return
+    }
+
+    // IMPORTANT: Do not collect or send data until user has entered an identifier
+    const hasIdentifier = await this.hasIdentifier()
+    if (!hasIdentifier) {
+      console.warn('[webmunk-history] No identifier set - collection will not start until identifier is provided')
       return
     }
 
@@ -659,7 +688,7 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
 
   // Note: This module does NOT respond to events, only sends them
   // The logEvent method is intentionally not implemented to avoid infinite recursion
-  // when dispatchEvent() is called
+  // when broadcastEvent() is called
 }
 
 const plugin = new HistoryServiceWorkerModule()
