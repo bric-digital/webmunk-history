@@ -7,8 +7,8 @@ Webmunk module for collecting web browsing history via the `chrome.history` API.
 **webmunk-history** collects browsing history data for research purposes. It:
 
 - Queries browser history at configurable intervals
-- Filters URLs using allow lists and filter lists (via webmunk-lists)
-- Categorizes URLs based on category lists
+- Filters URLs using allow lists and filter lists (requires **webmunk-lists** module)
+- Categorizes URLs based on category lists (requires **webmunk-lists** module)
 - Optionally generates top-visited domain lists
 - Transmits data via webmunk-passive-data-kit
 
@@ -107,6 +107,14 @@ The `allow_lists`, `filter_lists`, `category_lists`, and `domain_only_lists` fie
 
 This module supports a local configuration override stored in `chrome.storage.local` under the key `webmunkHistoryConfiguration`. When present, local settings are merged with backend settings (local takes precedence).
 
+## Dependencies
+
+This module requires:
+
+- **[@bric/webmunk-core](https://github.com/bric-digital/webmunk-core)** - Core Webmunk framework (required)
+- **[@bric/webmunk-lists](https://github.com/bric-digital/webmunk-lists)** - List management and URL filtering (required)
+- **[@bric/webmunk-passive-data-kit](https://github.com/bric-digital/webmunk-passive-data-kit)** - Data transmission (required for data upload)
+
 ## Installation
 
 Add to your extension's `package.json` dependencies:
@@ -114,6 +122,9 @@ Add to your extension's `package.json` dependencies:
 ```json
 {
   "dependencies": {
+    "@bric/webmunk-core": "github:bric-digital/webmunk-core#main",
+    "@bric/webmunk-lists": "github:bric-digital/webmunk-lists#main",
+    "@bric/webmunk-passive-data-kit": "github:bric-digital/webmunk-passive-data-kit#main",
     "@bric/webmunk-history": "github:bric-digital/webmunk-history#main"
   }
 }
