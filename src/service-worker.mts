@@ -8,6 +8,7 @@ interface HistoryConfig {
   filter_lists: string[];
   allow_lists: string[];
   category_lists: string[];
+  domain_only_lists: string[];
   generate_top_domains: boolean;
   top_domains_count: number;
   top_domains_list_name: string;
@@ -364,6 +365,20 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
             if (recordedUrl.startsWith('CATEGORY:')) {
               recordedTitle = ''
               registeredDomain = ''
+            } else {
+              // Apply domain_only_lists: if matched, replace URL/title with DOMAIN ONLY but keep domain
+              const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
+                visit_id: visit.visitId,
+                visit_time: visit.visitTime,
+                history_item_id: item.id
+              })
+              if (domainOnlyResult.filteredByList) {
+                recordedUrl = 'DOMAIN ONLY'
+                recordedTitle = 'DOMAIN ONLY'
+                filteredByList = domainOnlyResult.filteredByList
+                filterMatch = domainOnlyResult.filterMatch
+                // registeredDomain stays as-is
+              }
             }
           }
 
@@ -533,6 +548,38 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     }
 
     return { recordedUrl: url }
+  }
+
+  /**
+   * Apply configured domain_only_lists to a URL.
+   *
+   * If a match is found, we replace the recorded URL and title with "DOMAIN ONLY" while preserving
+   * the registered domain field. This allows researchers to know which domain was visited without
+   * exposing the full URL or page title.
+   */
+  private async applyDomainOnlyLists(
+    url: string,
+    ctx: { visit_id?: string; visit_time?: number; history_item_id?: string }
+  ): Promise<{ filteredByList?: string; filterMatch?: listUtils.ListEntry }> {
+    if (!this.config || !this.config.domain_only_lists) {
+      return {}
+    }
+
+    for (const listName of this.config.domain_only_lists) {
+      try {
+        const match = await listUtils.matchDomainAgainstList(url, listName)
+        if (match) {
+          console.log(`[webmunk-history] Applied domain-only filter by list ${listName}`)
+
+          await this.maybeLogFilteredUrlDebug(url, 'DOMAIN ONLY', listName, match, ctx)
+          return { filteredByList: listName, filterMatch: match }
+        }
+      } catch (error) {
+        console.error(`[webmunk-history] Error checking domain-only list ${listName}:`, error)
+      }
+    }
+
+    return {}
   }
 
   private isDevExtension(): boolean {

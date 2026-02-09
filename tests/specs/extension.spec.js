@@ -23,6 +23,7 @@ test.describe('History Extension - UI Elements', () => {
         hasConfigLookback: !!document.querySelector('#history-config-lookback'),
         hasConfigFilterLists: !!document.querySelector('#history-config-filter-lists'),
         hasConfigCategoryLists: !!document.querySelector('#history-config-category-lists'),
+        hasConfigDomainOnlyLists: !!document.querySelector('#history-config-domain-only-lists'),
         hasConfigTopDomains: !!document.querySelector('#history-config-top-domains'),
         hasConfigTopDomainsCount: !!document.querySelector('#history-config-top-domains-count')
       };
@@ -36,6 +37,7 @@ test.describe('History Extension - UI Elements', () => {
     expect(elements.hasConfigLookback).toBe(true);
     expect(elements.hasConfigFilterLists).toBe(true);
     expect(elements.hasConfigCategoryLists).toBe(true);
+    expect(elements.hasConfigDomainOnlyLists).toBe(true);
     expect(elements.hasConfigTopDomains).toBe(true);
     expect(elements.hasConfigTopDomainsCount).toBe(true);
   });
@@ -180,6 +182,7 @@ test.describe('History Extension - Configuration Display', () => {
           lookback_days: 7,
           filter_lists: ['blocked-sites', 'sensitive-domains'],
           category_lists: ['social-media', 'news'],
+          domain_only_lists: ['video-platforms'],
           generate_top_domains: true,
           top_domains_count: 50,
           top_domains_list_name: 'top-domains'
@@ -197,6 +200,7 @@ test.describe('History Extension - Configuration Display', () => {
         lookback: document.querySelector('#history-config-lookback').textContent,
         filterLists: document.querySelector('#history-config-filter-lists').textContent,
         categoryLists: document.querySelector('#history-config-category-lists').textContent,
+        domainOnlyLists: document.querySelector('#history-config-domain-only-lists')?.textContent,
         topDomains: document.querySelector('#history-config-top-domains').textContent,
         topDomainsCount: document.querySelector('#history-config-top-domains-count').textContent
       };
@@ -206,6 +210,7 @@ test.describe('History Extension - Configuration Display', () => {
     expect(configValues.lookback).toBe('7');
     expect(configValues.filterLists).toBe('blocked-sites, sensitive-domains');
     expect(configValues.categoryLists).toBe('social-media, news');
+    expect(configValues.domainOnlyLists).toBe('video-platforms');
     expect(configValues.topDomains).toBe('Yes');
     expect(configValues.topDomainsCount).toBe('50');
   });
@@ -237,7 +242,8 @@ test.describe('History Extension - Configuration Display', () => {
       window.mockConfigResponse = {
         history: {
           filter_lists: [],
-          category_lists: []
+          category_lists: [],
+          domain_only_lists: []
         }
       };
 
@@ -249,12 +255,14 @@ test.describe('History Extension - Configuration Display', () => {
     const configValues = await page.evaluate(() => {
       return {
         filterLists: document.querySelector('#history-config-filter-lists').textContent,
-        categoryLists: document.querySelector('#history-config-category-lists').textContent
+        categoryLists: document.querySelector('#history-config-category-lists').textContent,
+        domainOnlyLists: document.querySelector('#history-config-domain-only-lists').textContent
       };
     });
 
     expect(configValues.filterLists).toBe('None');
     expect(configValues.categoryLists).toBe('None');
+    expect(configValues.domainOnlyLists).toBe('None');
   });
 
   test('should display "No" when top domains generation is disabled', async ({ page }) => {

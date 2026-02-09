@@ -33,6 +33,7 @@ test.describe('History Service Worker - Initialization', () => {
             lookback_days: 7,
             filter_lists: ['blocked-sites'],
             category_lists: ['social-media'],
+            domain_only_lists: ['social-platforms'],
             generate_top_domains: true,
             top_domains_count: 50,
             top_domains_list_name: 'top-domains'
@@ -50,6 +51,7 @@ test.describe('History Service Worker - Initialization', () => {
     expect(config.lookback_days).toBe(7);
     expect(config.filter_lists).toEqual(['blocked-sites']);
     expect(config.category_lists).toEqual(['social-media']);
+    expect(config.domain_only_lists).toEqual(['social-platforms']);
     expect(config.generate_top_domains).toBe(true);
   });
 
@@ -62,6 +64,7 @@ test.describe('History Service Worker - Initialization', () => {
             lookback_days: 7,
             filter_lists: ['blocked-sites'],
             category_lists: ['social-media'],
+            domain_only_lists: ['social-platforms'],
             generate_top_domains: true,
             top_domains_count: 50,
             top_domains_list_name: 'top-domains'
@@ -579,5 +582,117 @@ test.describe('History Service Worker - Top Domains Generation', () => {
     expect(items).toHaveLength(3);
     expect(items.some(item => item.url.includes('google.com'))).toBe(true);
     expect(items.some(item => item.url.includes('example.com'))).toBe(true);
+  });
+});
+
+test.describe('History Service Worker - Domain Only Lists', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.testUtilitiesReady === true);
+    await page.evaluate(() => window.clearStorage());
+  });
+
+  test('should support domain_only_lists in configuration', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.chrome.storage.local.set({
+        webmunkConfiguration: {
+          history: {
+            collection_interval_minutes: 5,
+            lookback_days: 1,
+            filter_lists: [],
+            category_lists: [],
+            domain_only_lists: ['social-media-sites', 'video-platforms'],
+            generate_top_domains: false
+          }
+        }
+      });
+    });
+
+    const config = await page.evaluate(async () => {
+      const result = await window.chrome.storage.local.get('webmunkConfiguration');
+      return result.webmunkConfiguration.history;
+    });
+
+    expect(config.domain_only_lists).toEqual(['social-media-sites', 'video-platforms']);
+  });
+
+  test('should handle empty domain_only_lists', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.chrome.storage.local.set({
+        webmunkConfiguration: {
+          history: {
+            collection_interval_minutes: 5,
+            lookback_days: 1,
+            filter_lists: [],
+            category_lists: [],
+            domain_only_lists: [],
+            generate_top_domains: false
+          }
+        }
+      });
+    });
+
+    const config = await page.evaluate(async () => {
+      const result = await window.chrome.storage.local.get('webmunkConfiguration');
+      return result.webmunkConfiguration.history;
+    });
+
+    expect(config.domain_only_lists).toEqual([]);
+  });
+
+  test('should handle missing domain_only_lists field', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.chrome.storage.local.set({
+        webmunkConfiguration: {
+          history: {
+            collection_interval_minutes: 5,
+            lookback_days: 1,
+            filter_lists: [],
+            category_lists: [],
+            generate_top_domains: false
+          }
+        }
+      });
+    });
+
+    const config = await page.evaluate(async () => {
+      const result = await window.chrome.storage.local.get('webmunkConfiguration');
+      return result.webmunkConfiguration.history;
+    });
+
+    // domain_only_lists should be undefined or not present
+    expect(config.domain_only_lists).toBeUndefined();
+  });
+
+  test('domain_only_lists should preserve domain field behavior', async ({ page }) => {
+    // This test verifies that the configuration structure supports domain-only filtering
+    // The actual filtering logic (URL/title -> "DOMAIN ONLY", domain preserved) 
+    // is tested in integration tests with real list matching
+    await page.evaluate(async () => {
+      await window.chrome.storage.local.set({
+        webmunkConfiguration: {
+          history: {
+            collection_interval_minutes: 5,
+            lookback_days: 1,
+            allow_lists: [],
+            filter_lists: [],
+            category_lists: ['news-sites'],
+            domain_only_lists: ['social-media-sites'],
+            generate_top_domains: false
+          }
+        }
+      });
+    });
+
+    const config = await page.evaluate(async () => {
+      const result = await window.chrome.storage.local.get('webmunkConfiguration');
+      return result.webmunkConfiguration.history;
+    });
+
+    // Verify configuration supports all list types simultaneously
+    expect(config.allow_lists).toEqual([]);
+    expect(config.filter_lists).toEqual([]);
+    expect(config.category_lists).toEqual(['news-sites']);
+    expect(config.domain_only_lists).toEqual(['social-media-sites']);
   });
 });

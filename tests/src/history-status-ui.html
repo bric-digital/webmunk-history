@@ -102,6 +102,10 @@
             <span id="history-config-category-lists" class="status-value">None</span>
         </div>
         <div class="status-item">
+            <span class="status-label">Domain-Only Lists:</span>
+            <span id="history-config-domain-only-lists" class="status-value">None</span>
+        </div>
+        <div class="status-item">
             <span class="status-label">Generate Top Domains:</span>
             <span id="history-config-top-domains" class="status-value">No</span>
         </div>
@@ -218,6 +222,7 @@
                     document.getElementById('history-config-filter-lists').textContent = config.filter_lists?.length ? config.filter_lists.join(', ') : 'None';
                     document.getElementById('history-config-allow-lists').textContent = config.allow_lists?.length ? config.allow_lists.join(', ') : 'None (all URLs allowed)';
                     document.getElementById('history-config-category-lists').textContent = config.category_lists?.join(', ') || 'None';
+                    document.getElementById('history-config-domain-only-lists').textContent = config.domain_only_lists?.length ? config.domain_only_lists.join(', ') : 'None';
                     document.getElementById('history-config-top-domains').textContent = config.generate_top_domains ? 'Yes' : 'No';
                     document.getElementById('history-config-top-domains-count').textContent = config.top_domains_count?.toString() || 'N/A';
                 }
