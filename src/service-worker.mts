@@ -632,18 +632,42 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
   async categorizeUrl(url: string): Promise<string[]> {
     if (!this.config) return []
 
-    const categories: string[] = []
+    // Collect all matches with their pattern types
+    const matches: Array<{ category: string; pattern_type: string }> = []
 
     for (const listName of this.config.category_lists) {
       try {
         const match = await listUtils.matchDomainAgainstList(url, listName)
         if (match && match.metadata?.category) {
-          categories.push(match.metadata.category as string)
+          matches.push({
+            category: match.metadata.category as string,
+            pattern_type: match.pattern_type
+          })
         }
       } catch (error) {
         console.error(`[webmunk-history] Error checking category list ${listName}:`, error)
       }
     }
+
+    if (matches.length === 0) return []
+
+    // Define specificity hierarchy (higher = more specific)
+    const specificity: Record<string, number> = {
+      'exact_url': 5,
+      'regex': 4,
+      'host_path_prefix': 3,
+      'host': 2,
+      'domain': 1
+    }
+
+    // Find the highest specificity level among matches
+    const maxSpecificity = Math.max(...matches.map(m => specificity[m.pattern_type] || 0))
+
+    // Return categories only from the most specific pattern type(s)
+    // If multiple patterns at the same specificity level match, include all categories
+    const categories = matches
+      .filter(m => specificity[m.pattern_type] === maxSpecificity)
+      .map(m => m.category)
 
     return categories
   }
