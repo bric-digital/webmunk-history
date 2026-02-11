@@ -1,5 +1,5 @@
 import psl from 'psl'
-import { WebmunkServiceWorkerModule, registerWebmunkModule, dispatchEvent } from '@bric/webmunk-core/service-worker'
+import { REXServiceWorkerModule, registerREXModule, dispatchEvent } from '@bric/rex-core/service-worker'
 import * as listUtils from '@bric/webmunk-lists'
 
 interface HistoryConfig {
@@ -25,7 +25,7 @@ interface HistoryStatus {
 /**
  * History collection module - collects browser history with filtering and categorization
  */
-class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
+class HistoryServiceWorkerModule extends REXServiceWorkerModule {
   config: HistoryConfig | null = null
   status: HistoryStatus = {
     itemsCollected: 0,
@@ -118,10 +118,11 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
       }
     })
 
-    // Set up message listener
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      return this.handleMessage(message, sender, sendResponse)
-    })
+    // Message listener registration is handled by rex-core; registering here
+    // would create a duplicate listener. Kept commented for reference.
+    // chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    //   return this.handleMessage(message, sender, sendResponse)
+    // })
 
     // Load status from storage
     await this.loadStatus()
@@ -174,6 +175,16 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
         await this.saveStatus()
         console.warn('[webmunk-history] No history configuration found (neither override nor server config)')
       }
+      if (baseConfig !== undefined && baseConfig['lists'] !== undefined) {
+        listUtils.parseAndSyncLists(baseConfig['lists'])
+          .then(() => {
+            console.log('[webmunk-history] Lists synced.')
+          })
+          .catch((err: unknown) => {
+            console.error('[webmunk-history] Failed to sync lists:', err)
+          })
+      }
+
     } catch (error) {
       console.error('[webmunk-history] Failed to load configuration:', error)
     }
@@ -752,7 +763,7 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     if (message.messageType === 'getHistoryStatus') {
       console.log('[webmunk-history] Sending status:', this.status)
       sendResponse(this.status)
-      return false
+      return true
     }
 
     console.log('[webmunk-history] Unknown message type, not handling')
@@ -761,11 +772,11 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
 
   // Note: This module does NOT respond to events, only sends them
   // The logEvent method is intentionally not implemented to avoid infinite recursion
-  // when broadcastEvent() is called
+  // when dispatchEvent() is called
 }
 
 const plugin = new HistoryServiceWorkerModule()
 
-registerWebmunkModule(plugin)
+registerREXModule(plugin)
 
 export default plugin
