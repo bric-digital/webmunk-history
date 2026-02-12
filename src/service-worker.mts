@@ -1,5 +1,5 @@
 import psl from 'psl'
-import rexCorePlugin, { WebmunkServiceWorkerModule, registerWebmunkModule, dispatchEvent } from '@bric/rex-core/service-worker'
+import rexCorePlugin, { REXServiceWorkerModule, registerREXModule, dispatchEvent } from '@bric/rex-core/service-worker'
 import { type REXConfiguration } from '@bric/rex-core/extension'
 import * as listUtils from '@bric/webmunk-lists'
 
@@ -26,7 +26,7 @@ interface HistoryStatus {
 /**
  * History collection module - collects browser history with filtering and categorization
  */
-class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
+class HistoryServiceWorkerModule extends REXServiceWorkerModule {
   config: HistoryConfig | null = null
   status: HistoryStatus = {
     itemsCollected: 0,
@@ -56,8 +56,8 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
    */
   async hasIdentifier(): Promise<boolean> {
     try {
-      const result = await chrome.storage.local.get('webmunkIdentifier')
-      const identifier = (result.webmunkIdentifier as string | undefined)?.toString().trim()
+      const result = await chrome.storage.local.get('rexIdentifier')
+      const identifier = (result.rexIdentifier as string | undefined)?.toString().trim()
       return Boolean(identifier)
     } catch (error) {
       console.error('[webmunk-history] Failed to check identifier:', error)
@@ -80,7 +80,7 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     // This ensures periodic collection turns on once history config becomes available AND identifier is set.
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return
-      if (changes.webmunkConfiguration || changes.webmunkHistoryConfiguration || changes.webmunkIdentifier) {
+      if (changes.REXConfiguration || changes.webmunkHistoryConfiguration || changes.rexIdentifier) {
         this.loadConfiguration()
           .then(async () => {
             const hasIdentifier = await this.hasIdentifier()
@@ -158,9 +158,9 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
 
   async loadConfiguration() {
     try {
-      // Base config typically comes from the server-provided config (stored by webmunk-core)
-      const baseResult = await chrome.storage.local.get('webmunkConfiguration')
-      const baseConfig = baseResult.webmunkConfiguration as { history?: HistoryConfig } | undefined
+      // Base config typically comes from the server-provided config (stored by rex-core)
+      const baseResult = await chrome.storage.local.get('REXConfiguration')
+      const baseConfig = baseResult.REXConfiguration as { history?: HistoryConfig } | undefined
 
       // Optional local override (often injected by an extension's service worker from its bundled config.json)
       const overrideResult = await chrome.storage.local.get('webmunkHistoryConfiguration')
@@ -191,7 +191,7 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
 
         console.log('[webmunk-history] Effective configuration loaded:', effectiveHistory)
         if (source === 'local_override') {
-          console.warn('[webmunk-history] Using LOCAL override config (webmunkHistoryConfiguration.history) over server config (webmunkConfiguration.history)')
+          console.warn('[webmunk-history] Using LOCAL override config (webmunkHistoryConfiguration.history) over server config (REXConfiguration.history)')
         }
       } else {
         this.config = null
@@ -297,7 +297,7 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
     await this.loadConfiguration()
 
     // In some environments (e.g., integration tests), the extension UI may write the initial
-    // `webmunkConfiguration` slightly after the service worker starts. For manual collection,
+    // `REXConfiguration` slightly after the service worker starts. For manual collection,
     // do a short bounded retry so a user click doesn't silently no-op due to a race.
     if (!this.config) {
       const deadlineMs = Date.now() + 1500
@@ -802,6 +802,6 @@ class HistoryServiceWorkerModule extends WebmunkServiceWorkerModule {
 
 const plugin = new HistoryServiceWorkerModule()
 
-registerWebmunkModule(plugin)
+registerREXModule(plugin)
 
 export default plugin

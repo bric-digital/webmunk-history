@@ -1,10 +1,10 @@
-import { WebmunkClientModule, registerWebmunkModule } from '@bric/rex-core/browser'
+import { REXClientModule, registerREXModule } from '@bric/rex-core/browser'
 
 /**
  * Minimal browser module for webmunk-history
  * History collection happens in the service worker, not in the browser context
  */
-class HistoryBrowserModule extends WebmunkClientModule {
+class HistoryBrowserModule extends REXClientModule {
   constructor() {
     super()
   }
@@ -17,6 +17,6 @@ class HistoryBrowserModule extends WebmunkClientModule {
 
 const plugin = new HistoryBrowserModule()
 
-registerWebmunkModule(plugin)
+registerREXModule(plugin)
 
 export default plugin

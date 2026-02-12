@@ -1,10 +1,10 @@
 import $ from 'jquery'
-import { WebmunkExtensionModule, registerWebmunkModule, WebmunkUIDefinition } from '@bric/rex-core/extension'
+import { REXExtensionModule, registerREXModule, REXUIDefinition } from '@bric/rex-core/extension'
 
 /**
  * History module extension - provides status UI for history collection
  */
-class HistoryExtensionModule extends WebmunkExtensionModule {
+class HistoryExtensionModule extends REXExtensionModule {
   constructor() {
     super()
   }
@@ -13,7 +13,7 @@ class HistoryExtensionModule extends WebmunkExtensionModule {
     console.log('[webmunk-history/extension] History extension module loaded')
   }
 
-  activateInterface(uiDefinition: WebmunkUIDefinition): boolean {
+  activateInterface(uiDefinition: REXUIDefinition): boolean {
     if (uiDefinition.identifier === 'history-status') {
       this.setupHistoryStatusUI()
       return true
@@ -114,6 +114,6 @@ class HistoryExtensionModule extends WebmunkExtensionModule {
 
 const plugin = new HistoryExtensionModule()
 
-registerWebmunkModule(plugin)
+registerREXModule(plugin)
 
 export default plugin
