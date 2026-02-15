@@ -16,6 +16,13 @@ Webmunk module for collecting web browsing history via the `chrome.history` API.
 
 This module reads from the `history` section of the backend config.
 
+### Configuration Source of Truth
+
+- `webmunk-history` reads its module configuration from rex-core (`REXConfiguration.history`).
+- It does **not** support a module-local configuration override key in storage.
+- List behavior (`allow_lists`, `filter_lists`, `category_lists`, `domain_only_lists`) uses list names from `history` config and resolves entries from the shared lists database (`@bric/webmunk-lists`).
+- As a result, user edits made through `webmunk-lists-front-end` are immediately visible to history matching for those configured list names.
+
 ### Schema
 
 | Field | Type | Required | Default | Description |
@@ -103,15 +110,11 @@ This module supports four different types of lists, each with distinct behavior:
 
 The `allow_lists`, `filter_lists`, `category_lists`, and `domain_only_lists` fields reference list names defined in the `lists` configuration section. See [webmunk-lists](https://github.com/bric-digital/webmunk-lists) for list format documentation.
 
-### Local Override
-
-This module supports a local configuration override stored in `chrome.storage.local` under the key `webmunkHistoryConfiguration`. When present, local settings are merged with backend settings (local takes precedence).
-
 ## Dependencies
 
 This module requires:
 
-- **[@bric/webmunk-core](https://github.com/bric-digital/webmunk-core)** - Core Webmunk framework (required)
+- **[@bric/rex-core](https://github.com/bric-digital/rex-core)** - Core REX framework (required)
 - **[@bric/webmunk-lists](https://github.com/bric-digital/webmunk-lists)** - List management and URL filtering (required)
 - **[@bric/webmunk-passive-data-kit](https://github.com/bric-digital/webmunk-passive-data-kit)** - Data transmission (required for data upload)
 
@@ -122,7 +125,7 @@ Add to your extension's `package.json` dependencies:
 ```json
 {
   "dependencies": {
-    "@bric/webmunk-core": "github:bric-digital/webmunk-core#main",
+    "@bric/rex-core": "github:bric-digital/rex-core#main",
     "@bric/webmunk-lists": "github:bric-digital/webmunk-lists#main",
     "@bric/webmunk-passive-data-kit": "github:bric-digital/webmunk-passive-data-kit#main",
     "@bric/webmunk-history": "github:bric-digital/webmunk-history#main"

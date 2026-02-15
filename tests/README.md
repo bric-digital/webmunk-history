@@ -68,14 +68,14 @@ This will:
 ```
 Running tests using 1 worker
 
-  ✓ History Service Worker - Initialization (4)
+  ✓ History Service Worker - Initialization (3)
   ✓ History Service Worker - Storage Operations (4)
   ✓ History Service Worker - URL Filtering (2)
   ✓ History Service Worker - Alarm Management (2)
   ✓ History Service Worker - Mock History Collection (3)
   ✓ History Service Worker - Debug Logging Guards (3)
   ✓ History Service Worker - Message Handling (2)
-  ✓ History Service Worker - Configuration Changes (2)
+  ✓ History Service Worker - Configuration Changes (1)
   ✓ History Service Worker - Top Domains Generation (1)
   ✓ History Extension - UI Elements (1)
   ✓ History Extension - Status Display (4)
@@ -83,7 +83,7 @@ Running tests using 1 worker
   ✓ History Extension - User Interactions (3)
   ✓ History Extension - Error Handling (2)
 
-  37 passed (8s)
+  35 passed (8s)
 ```
 
 ---
@@ -110,11 +110,10 @@ tests/
 
 ### Service Worker Module Tests (23 tests)
 
-**Initialization** (4 tests)
+**Initialization** (3 tests)
 - Initialize with no configuration
 - Load configuration from server config
-- Prioritize local override config over server config
-- Configuration merging behavior
+- Load only rex-core server configuration
 
 **Storage Operations** (4 tests)
 - Save and load status
@@ -144,9 +143,8 @@ tests/
 - Respond to getHistoryStatus message
 - Respond to triggerHistoryCollection message
 
-**Configuration Changes** (2 tests)
+**Configuration Changes** (1 test)
 - React to configuration changes
-- React to local override changes
 
 **Top Domains Generation** (1 test)
 - Collect domains from history

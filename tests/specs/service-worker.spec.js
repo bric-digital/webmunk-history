@@ -17,8 +17,8 @@ test.describe('History Service Worker - Initialization', () => {
     // Note: Since we can't easily test the actual module instantiation,
     // we'll test the expected behavior through the mock APIs
     const hasConfig = await page.evaluate(async () => {
-      const result = await window.chrome.storage.local.get('webmunkConfiguration');
-      return !!result.webmunkConfiguration;
+      const result = await window.chrome.storage.local.get('REXConfiguration');
+      return !!result.REXConfiguration;
     });
 
     expect(hasConfig).toBe(false);
@@ -27,7 +27,7 @@ test.describe('History Service Worker - Initialization', () => {
   test('should load configuration from server config', async ({ page }) => {
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 60,
             lookback_days: 7,
@@ -43,8 +43,8 @@ test.describe('History Service Worker - Initialization', () => {
     });
 
     const config = await page.evaluate(async () => {
-      const result = await window.chrome.storage.local.get('webmunkConfiguration');
-      return result.webmunkConfiguration.history;
+      const result = await window.chrome.storage.local.get('REXConfiguration');
+      return result.REXConfiguration.history;
     });
 
     expect(config.collection_interval_minutes).toBe(60);
@@ -55,10 +55,10 @@ test.describe('History Service Worker - Initialization', () => {
     expect(config.generate_top_domains).toBe(true);
   });
 
-  test('should prioritize local override config over server config', async ({ page }) => {
+  test('should load only server configuration from rex-core storage', async ({ page }) => {
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 60,
             lookback_days: 7,
@@ -69,25 +69,17 @@ test.describe('History Service Worker - Initialization', () => {
             top_domains_count: 50,
             top_domains_list_name: 'top-domains'
           }
-        },
-        webmunkHistoryConfiguration: {
-          history: {
-            collection_interval_minutes: 30,
-            lookback_days: 14
-          }
         }
       });
     });
 
-    const configs = await page.evaluate(async () => {
-      const base = await window.chrome.storage.local.get('webmunkConfiguration');
-      const override = await window.chrome.storage.local.get('webmunkHistoryConfiguration');
-      return { base: base.webmunkConfiguration.history, override: override.webmunkHistoryConfiguration.history };
+    const config = await page.evaluate(async () => {
+      const stored = await window.chrome.storage.local.get('REXConfiguration');
+      return stored.REXConfiguration.history;
     });
 
-    // Override should have precedence
-    expect(configs.override.collection_interval_minutes).toBe(30);
-    expect(configs.override.lookback_days).toBe(14);
+    expect(config.collection_interval_minutes).toBe(60);
+    expect(config.lookback_days).toBe(7);
   });
 });
 
@@ -140,7 +132,7 @@ test.describe('History Service Worker - Storage Operations', () => {
   test('should handle missing last fetch time with lookback_days', async ({ page }) => {
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             lookback_days: 30
           }
@@ -489,13 +481,13 @@ test.describe('History Service Worker - Configuration Changes', () => {
     const listenerCalled = await page.evaluate(async () => {
       let called = false;
       window.chrome.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName === 'local' && changes.webmunkConfiguration) {
+        if (areaName === 'local' && changes.REXConfiguration) {
           called = true;
         }
       });
 
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 30
           }
@@ -511,30 +503,6 @@ test.describe('History Service Worker - Configuration Changes', () => {
     expect(listenerCalled).toBe(true);
   });
 
-  test('should react to local override changes', async ({ page }) => {
-    const listenerCalled = await page.evaluate(async () => {
-      let called = false;
-      window.chrome.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName === 'local' && changes.webmunkHistoryConfiguration) {
-          called = true;
-        }
-      });
-
-      await window.chrome.storage.local.set({
-        webmunkHistoryConfiguration: {
-          history: {
-            collection_interval_minutes: 15
-          }
-        }
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      return called;
-    });
-
-    expect(listenerCalled).toBe(true);
-  });
 });
 
 test.describe('History Service Worker - Top Domains Generation', () => {
@@ -595,7 +563,7 @@ test.describe('History Service Worker - Domain Only Lists', () => {
   test('should support domain_only_lists in configuration', async ({ page }) => {
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 5,
             lookback_days: 1,
@@ -609,8 +577,8 @@ test.describe('History Service Worker - Domain Only Lists', () => {
     });
 
     const config = await page.evaluate(async () => {
-      const result = await window.chrome.storage.local.get('webmunkConfiguration');
-      return result.webmunkConfiguration.history;
+      const result = await window.chrome.storage.local.get('REXConfiguration');
+      return result.REXConfiguration.history;
     });
 
     expect(config.domain_only_lists).toEqual(['social-media-sites', 'video-platforms']);
@@ -619,7 +587,7 @@ test.describe('History Service Worker - Domain Only Lists', () => {
   test('should handle empty domain_only_lists', async ({ page }) => {
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 5,
             lookback_days: 1,
@@ -633,8 +601,8 @@ test.describe('History Service Worker - Domain Only Lists', () => {
     });
 
     const config = await page.evaluate(async () => {
-      const result = await window.chrome.storage.local.get('webmunkConfiguration');
-      return result.webmunkConfiguration.history;
+      const result = await window.chrome.storage.local.get('REXConfiguration');
+      return result.REXConfiguration.history;
     });
 
     expect(config.domain_only_lists).toEqual([]);
@@ -643,7 +611,7 @@ test.describe('History Service Worker - Domain Only Lists', () => {
   test('should handle missing domain_only_lists field', async ({ page }) => {
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 5,
             lookback_days: 1,
@@ -656,8 +624,8 @@ test.describe('History Service Worker - Domain Only Lists', () => {
     });
 
     const config = await page.evaluate(async () => {
-      const result = await window.chrome.storage.local.get('webmunkConfiguration');
-      return result.webmunkConfiguration.history;
+      const result = await window.chrome.storage.local.get('REXConfiguration');
+      return result.REXConfiguration.history;
     });
 
     // domain_only_lists should be undefined or not present
@@ -670,7 +638,7 @@ test.describe('History Service Worker - Domain Only Lists', () => {
     // is tested in integration tests with real list matching
     await page.evaluate(async () => {
       await window.chrome.storage.local.set({
-        webmunkConfiguration: {
+        REXConfiguration: {
           history: {
             collection_interval_minutes: 5,
             lookback_days: 1,
@@ -685,8 +653,8 @@ test.describe('History Service Worker - Domain Only Lists', () => {
     });
 
     const config = await page.evaluate(async () => {
-      const result = await window.chrome.storage.local.get('webmunkConfiguration');
-      return result.webmunkConfiguration.history;
+      const result = await window.chrome.storage.local.get('REXConfiguration');
+      return result.REXConfiguration.history;
     });
 
     // Verify configuration supports all list types simultaneously

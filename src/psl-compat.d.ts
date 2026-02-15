@@ -3,7 +3,7 @@ declare module 'psl' {
    * Local typing shim for `psl` to avoid TS7016 caused by the package's `exports`
    * making its bundled typings non-resolvable under `moduleResolution: nodenext`.
    *
-   * This intentionally matches the shape used in `webmunk-core`:
+   * This intentionally matches the shape used in `rex-core`:
    * - `psl.parse()` returns either a parsed domain object (no `error`) or an error object (has `error`).
    * - Type is accessible as BOTH `import("psl").ParsedDomain` and `psl.ParsedDomain`.
    */

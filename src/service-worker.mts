@@ -19,7 +19,7 @@ interface HistoryStatus {
   lastCollectionTime?: number;
   itemsCollected: number;
   isCollecting: boolean;
-  configSource?: 'local_override' | 'server' | 'none';
+  configSource?: 'server' | 'none';
   effectiveConfig?: HistoryConfig;
 }
 
@@ -80,7 +80,7 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
     // This ensures periodic collection turns on once history config becomes available AND identifier is set.
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return
-      if (changes.REXConfiguration || changes.webmunkHistoryConfiguration || changes.rexIdentifier) {
+      if (changes.REXConfiguration || changes.rexIdentifier) {
         this.loadConfiguration()
           .then(async () => {
             const hasIdentifier = await this.hasIdentifier()
@@ -132,76 +132,28 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
     await this.loadConfiguration()
   }
 
-  refreshConfiguration() {
-    rexCorePlugin.fetchConfiguration()
-      .then((configuration:REXConfiguration) => {
-        if (configuration !== undefined) {
-          const historyConfig = configuration['history']
-
-          if (historyConfig !== undefined) {
-            this.updateConfiguration(historyConfig)
-          }
-        }
-      })
-  }
-
-  updateConfiguration(config) {
-    console.log('[history] updateConfiguration')
-    console.log(config)
-
-    chrome.storage.local.set({
-      'webmunkHistoryConfiguration': {
-        'history': config
-      }
-    })
-  }
-
   async loadConfiguration() {
     try {
-      // Base config typically comes from the server-provided config (stored by rex-core)
-      const baseResult = await chrome.storage.local.get('REXConfiguration')
-      const baseConfig = baseResult.REXConfiguration as { history?: HistoryConfig } | undefined
+      // Always fetch through rex-core, which owns configuration loading/storage.
+      const configuration = await rexCorePlugin.fetchConfiguration() as REXConfiguration | undefined
+      const historyConfig = configuration?.history as HistoryConfig | undefined
 
-      // Optional local override (often injected by an extension's service worker from its bundled config.json)
-      const overrideResult = await chrome.storage.local.get('webmunkHistoryConfiguration')
-      const overrideConfig = overrideResult.webmunkHistoryConfiguration as { history?: HistoryConfig } | undefined
-
-      const baseHistory = baseConfig?.history
-      const overrideHistory = overrideConfig?.history
-
-      // Effective config rule:
-      // - If overrideHistory exists, it overrides baseHistory field-by-field
-      // - Else fall back to baseHistory
-      let effectiveHistory: HistoryConfig | undefined
-      let source: HistoryStatus['configSource'] = 'none'
-
-      if (overrideHistory) {
-        effectiveHistory = { ...(baseHistory ?? {}), ...overrideHistory } as HistoryConfig
-        source = 'local_override'
-      } else if (baseHistory) {
-        effectiveHistory = baseHistory
-        source = 'server'
-      }
-
-      if (effectiveHistory) {
-        this.config = effectiveHistory
-        this.status.configSource = source
-        this.status.effectiveConfig = effectiveHistory
+      if (historyConfig) {
+        this.config = historyConfig
+        this.status.configSource = 'server'
+        this.status.effectiveConfig = historyConfig
         await this.saveStatus()
 
-        console.log('[webmunk-history] Effective configuration loaded:', effectiveHistory)
-        if (source === 'local_override') {
-          console.warn('[webmunk-history] Using LOCAL override config (webmunkHistoryConfiguration.history) over server config (REXConfiguration.history)')
-        }
+        console.log('[webmunk-history] Configuration loaded from rex-core:', historyConfig)
       } else {
         this.config = null
         this.status.configSource = 'none'
         delete this.status.effectiveConfig
         await this.saveStatus()
-        console.warn('[webmunk-history] No history configuration found (neither override nor server config)')
+        console.warn('[webmunk-history] No history configuration found in rex-core configuration')
       }
-      if (baseConfig !== undefined && baseConfig['lists'] !== undefined) {
-        listUtils.parseAndSyncLists(baseConfig['lists'])
+      if (configuration !== undefined && configuration['lists'] !== undefined) {
+        listUtils.parseAndSyncLists(configuration['lists'])
           .then(() => {
             console.log('[webmunk-history] Lists synced.')
           })
@@ -293,7 +245,7 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
       return
     }
 
-    // Re-load configuration so server updates / local overrides are reflected at collection time
+    // Re-load configuration so server updates are reflected at collection time
     await this.loadConfiguration()
 
     // In some environments (e.g., integration tests), the extension UI may write the initial
