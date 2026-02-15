@@ -232,225 +232,281 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
     }
   }
 
-  async collectHistory() {
+  collectHistory(): Promise<void> {
     if (this.status.isCollecting) {
       console.log('[webmunk-history] Collection already in progress, skipping')
-      return
+      return Promise.resolve()
     }
 
     // IMPORTANT: Do not collect or send data until user has entered an identifier
-    const hasIdentifier = await this.hasIdentifier()
-    if (!hasIdentifier) {
-      console.warn('[webmunk-history] No identifier set - collection will not start until identifier is provided')
-      return
-    }
-
-    // Re-load configuration so server updates are reflected at collection time
-    await this.loadConfiguration()
-
-    // In some environments (e.g., integration tests), the extension UI may write the initial
-    // `REXConfiguration` slightly after the service worker starts. For manual collection,
-    // do a short bounded retry so a user click doesn't silently no-op due to a race.
-    if (!this.config) {
-      const deadlineMs = Date.now() + 1500
-      while (!this.config && Date.now() < deadlineMs) {
-        await new Promise((resolve) => setTimeout(resolve, 250))
-        await this.loadConfiguration()
-      }
-    }
-
-    if (!this.config) {
-      console.warn('[webmunk-history] No configuration available, skipping collection')
-      return
-    }
-
-    console.log('[webmunk-history] Starting history collection')
-    this.status.isCollecting = true
-    await this.saveStatus()
-
-    try {
-      // Get last fetch time
-      const lastFetch = await this.getLastFetchTime()
-      console.log(`[webmunk-history] Fetching history since ${new Date(lastFetch).toISOString()}`)
-
-      // Search history since lastFetch
-      const historyItems = await chrome.history.search({
-        text: '',
-        startTime: lastFetch,
-        maxResults: 10000
+    return this.hasIdentifier()
+      .then((hasIdentifier) => {
+        if (!hasIdentifier) {
+          console.warn('[webmunk-history] No identifier set - collection will not start until identifier is provided')
+          return Promise.reject(new Error('NO_IDENTIFIER'))
+        }
+        return this.loadConfiguration()
       })
+      .then(() => this.waitForConfiguration())
+      .then(() => {
+        if (!this.config) {
+          console.warn('[webmunk-history] No configuration available, skipping collection')
+          return Promise.reject(new Error('NO_CONFIGURATION'))
+        }
 
-      console.log(`[webmunk-history] Found ${historyItems.length} history items`)
+        console.log('[webmunk-history] Starting history collection')
+        this.status.isCollecting = true
+        return this.saveStatus()
+      })
+      .then(() => this.runCollectionCycle())
+      .catch((error: unknown) => {
+        if (error instanceof Error && (error.message === 'NO_IDENTIFIER' || error.message === 'NO_CONFIGURATION')) {
+          return
+        }
 
-      let collectedCount = 0
+        console.error('[webmunk-history] Collection error:', error)
+        // Even on failure, record that we attempted a fetch so operators/tests can
+        // see activity and avoid "undefined" last-fetch state.
+        return this.setLastFetchTime(Date.now())
+      })
+      .finally(() => {
+        if (!this.status.isCollecting) {
+          return
+        }
 
-      // Process each history item
-      for (const item of historyItems) {
-        if (!item.url) continue
+        this.status.isCollecting = false
+        return this.saveStatus().finally(() => {
+          console.log('[webmunk-history] Collection complete')
+        })
+      })
+  }
 
-        // Get visits for this item
-        const visits = await chrome.history.getVisits({ url: item.url })
+  private waitForConfiguration(): Promise<void> {
+    if (this.config) {
+      return Promise.resolve()
+    }
 
-        for (const visit of visits) {
-          // Only process visits after lastFetch
-          if (!visit.visitTime || visit.visitTime <= lastFetch) continue
+    const deadlineMs = Date.now() + 1500
+    const tryReload = (): Promise<void> => {
+      if (this.config) {
+        return Promise.resolve()
+      }
+      if (Date.now() >= deadlineMs) {
+        return Promise.resolve()
+      }
 
-          // Basic privacy filter: only process http(s) URLs (and skip everything else like file://).
-          if (this.shouldSkipUrl(item.url)) {
-            continue
-          }
+      return new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), 250)
+      })
+        .then(() => this.loadConfiguration())
+        .then(() => tryReload())
+    }
 
-          // Extract registered domain from URL using psl
-          let registeredDomain = 'not available'
-          try {
-            const urlObj = new URL(item.url)
-            const hostname = urlObj.hostname
-            const parsed = psl.parse(hostname)
-            if (parsed.error === undefined && 'domain' in parsed && parsed.domain) {
-              registeredDomain = parsed.domain
+    return tryReload()
+  }
+
+  private runCollectionCycle(): Promise<void> {
+    let collectedCount = 0
+    let lastProcessedVisitTime = 0
+
+    return this.getLastFetchTime()
+      .then((initialLastFetch) => {
+        lastProcessedVisitTime = initialLastFetch
+        console.log(`[webmunk-history] Fetching history since ${new Date(initialLastFetch).toISOString()}`)
+
+        const fetchHistoryBatch = (): Promise<void> => {
+          return chrome.history.search({
+            text: '',
+            startTime: lastProcessedVisitTime,
+            maxResults: 10000
+          }).then((historyItems) => {
+            console.log(`[webmunk-history] Found ${historyItems.length} history items`)
+            if (historyItems.length === 0) {
+              return
             }
-          } catch {
-            // Keep default 'not available' for invalid URLs
-          }
 
-          // Apply allow_lists: if configured, only collect URLs matching an allow-list.
-          // If not allowed, create a dummy record (like blocklist behavior).
-          const allowCheck = await this.checkAllowLists(item.url)
-          let recordedUrl = item.url
-          let recordedTitle = item.title || ''
-          let filteredByList: string | undefined
-          let filterMatch: listUtils.ListEntry | undefined
-          
-          if (!allowCheck.allowed) {
-            // URL not on allowlist - create dummy record with category placeholder
-            recordedUrl = 'CATEGORY:NOT_ON_ALLOWLIST'
+            return this.processHistoryBatch(historyItems, lastProcessedVisitTime)
+              .then((batchResult) => {
+                collectedCount += batchResult.collectedCount
+                if (batchResult.maxVisitTime <= lastProcessedVisitTime) {
+                  return
+                }
+                // Advance cursor so the next fetch only looks for newer visits.
+                lastProcessedVisitTime = batchResult.maxVisitTime + 1
+                return fetchHistoryBatch()
+              })
+          })
+        }
+
+        return fetchHistoryBatch()
+      })
+      .then(() => {
+        console.log(`[webmunk-history] Collected ${collectedCount} history visits`)
+        if (this.config?.generate_top_domains) {
+          return this.generateTopDomainsList()
+        }
+      })
+      .then(() => {
+        this.status.lastCollectionTime = Date.now()
+        this.status.itemsCollected += collectedCount
+        return this.setLastFetchTime(Date.now())
+      })
+      .then(() => this.saveStatus())
+  }
+
+  private async processHistoryBatch(
+    historyItems: chrome.history.HistoryItem[],
+    lastFetch: number
+  ): Promise<{ collectedCount: number; maxVisitTime: number }> {
+    let collectedCount = 0
+    let maxVisitTime = lastFetch
+
+    // Process each history item
+    for (const item of historyItems) {
+      if (!item.url) continue
+
+      // Get visits for this item
+      const visits = await chrome.history.getVisits({ url: item.url })
+
+      for (const visit of visits) {
+        // Only process visits after lastFetch
+        if (!visit.visitTime || visit.visitTime <= lastFetch) continue
+        maxVisitTime = Math.max(maxVisitTime, visit.visitTime)
+
+        // Basic privacy filter: only process http(s) URLs (and skip everything else like file://).
+        if (this.shouldSkipUrl(item.url)) {
+          continue
+        }
+
+        // Extract registered domain from URL using psl
+        let registeredDomain = 'not available'
+        try {
+          const urlObj = new URL(item.url)
+          const hostname = urlObj.hostname
+          const parsed = psl.parse(hostname)
+          if (parsed.error === undefined && 'domain' in parsed && parsed.domain) {
+            registeredDomain = parsed.domain
+          }
+        } catch {
+          // Keep default 'not available' for invalid URLs
+        }
+
+        // Apply allow_lists: if configured, only collect URLs matching an allow-list.
+        // If not allowed, create a dummy record (like blocklist behavior).
+        const allowCheck = await this.checkAllowLists(item.url)
+        let recordedUrl = item.url
+        let recordedTitle = item.title || ''
+        let filteredByList: string | undefined
+        let filterMatch: listUtils.ListEntry | undefined
+
+        if (!allowCheck.allowed) {
+          // URL not on allowlist - create dummy record with category placeholder
+          recordedUrl = 'CATEGORY:NOT_ON_ALLOWLIST'
+          recordedTitle = ''
+          registeredDomain = ''
+          // Log debug event if enabled (dev-only)
+          await this.maybeLogFilteredUrlDebug(
+            item.url,
+            recordedUrl,
+            'NOT_ON_ALLOWLIST',
+            undefined,
+            {
+              visit_id: visit.visitId,
+              visit_time: visit.visitTime,
+              history_item_id: item.id
+            }
+          )
+        } else {
+          // Apply filter_lists to produce a privacy-preserving recorded URL (but still upload the visit).
+          const filterResult = await this.applyFilterLists(item.url, {
+            visit_id: visit.visitId,
+            visit_time: visit.visitTime,
+            history_item_id: item.id
+          })
+          recordedUrl = filterResult.recordedUrl
+          filteredByList = filterResult.filteredByList
+          filterMatch = filterResult.filterMatch
+
+          // Privacy: if we masked the URL, mask the title and domain too.
+          if (recordedUrl.startsWith('CATEGORY:')) {
             recordedTitle = ''
             registeredDomain = ''
-            // Log debug event if enabled (dev-only)
-            await this.maybeLogFilteredUrlDebug(
-              item.url, 
-              recordedUrl, 
-              'NOT_ON_ALLOWLIST',
-              undefined,
-              {
-                visit_id: visit.visitId,
-                visit_time: visit.visitTime,
-                history_item_id: item.id
-              }
-            )
           } else {
-            // Apply filter_lists to produce a privacy-preserving recorded URL (but still upload the visit).
-            const filterResult = await this.applyFilterLists(item.url, {
+            // Apply domain_only_lists: if matched, replace URL/title with DOMAIN ONLY but keep domain
+            const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
               visit_id: visit.visitId,
               visit_time: visit.visitTime,
               history_item_id: item.id
             })
-            recordedUrl = filterResult.recordedUrl
-            filteredByList = filterResult.filteredByList
-            filterMatch = filterResult.filterMatch
-
-            // Privacy: if we masked the URL, mask the title and domain too.
-            if (recordedUrl.startsWith('CATEGORY:')) {
-              recordedTitle = ''
-              registeredDomain = ''
-            } else {
-              // Apply domain_only_lists: if matched, replace URL/title with DOMAIN ONLY but keep domain
-              const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
-                visit_id: visit.visitId,
-                visit_time: visit.visitTime,
-                history_item_id: item.id
-              })
-              if (domainOnlyResult.filteredByList) {
-                recordedUrl = 'DOMAIN ONLY'
-                recordedTitle = 'DOMAIN ONLY'
-                filteredByList = domainOnlyResult.filteredByList
-                filterMatch = domainOnlyResult.filterMatch
-                // registeredDomain stays as-is
-              }
+            if (domainOnlyResult.filteredByList) {
+              recordedUrl = 'DOMAIN ONLY'
+              recordedTitle = 'DOMAIN ONLY'
+              filteredByList = domainOnlyResult.filteredByList
+              filterMatch = domainOnlyResult.filterMatch
+              // registeredDomain stays as-is
             }
           }
-
-          // Categorize against category lists
-          const categories = await this.categorizeUrl(item.url)
-
-          // Dispatch event to all modules (PDK will pick it up for upload)
-          console.log('[webmunk-history] Logging event: webmunk-history-visit')
-          dispatchEvent({
-            name: 'webmunk-history-visit',
-            // IMPORTANT: `url` is the recorded URL (may be replaced by CATEGORY:... for filtered items)
-            url: recordedUrl,
-            recorded_url: recordedUrl,
-            domain: registeredDomain,
-            title: recordedTitle,
-            visit_time: visit.visitTime,
-            transition: visit.transition,
-            is_local: visit.isLocal,
-            categories: categories,
-            date: visit.visitTime,
-
-            // Stable per-visit identifiers (useful for dedup + sequence reconstruction)
-            visit_id: visit.visitId,
-            referring_visit_id: visit.referringVisitId,
-
-            // URL-level history item fields (useful context, low cost)
-            history_item_id: item.id,
-            last_visit_time: item.lastVisitTime,
-            visit_count: item.visitCount,
-            typed_count: item.typedCount,
-
-            // Allow-list context (which list allowed this URL)
-            allowed_by_list: allowCheck.matchedList,
-            allowed_by_list_entry: allowCheck.matchEntry
-              ? {
-                  list_name: allowCheck.matchedList,
-                  matched_pattern: allowCheck.matchEntry.domain,
-                  matched_pattern_type: allowCheck.matchEntry.pattern_type,
-                  matched_source: allowCheck.matchEntry.source,
-                  matched_metadata: allowCheck.matchEntry.metadata || {}
-                }
-              : undefined,
-
-            // Filter-list context (safe: doesn't include original URL)
-            filtered: Boolean(filteredByList),
-            filtered_by_list: filteredByList,
-            filtered_by_list_entry: filterMatch
-              ? {
-                  list_name: filteredByList,
-                  matched_pattern: filterMatch.domain,
-                  matched_pattern_type: filterMatch.pattern_type,
-                  matched_source: filterMatch.source,
-                  matched_metadata: filterMatch.metadata || {}
-                }
-              : undefined
-          })
-
-          collectedCount++
         }
+
+        // Categorize against category lists
+        const categories = await this.categorizeUrl(item.url)
+
+        // Dispatch event to all modules (PDK will pick it up for upload)
+        console.log('[webmunk-history] Logging event: webmunk-history-visit')
+        dispatchEvent({
+          name: 'webmunk-history-visit',
+          // IMPORTANT: `url` is the recorded URL (may be replaced by CATEGORY:... for filtered items)
+          url: recordedUrl,
+          recorded_url: recordedUrl,
+          domain: registeredDomain,
+          title: recordedTitle,
+          visit_time: visit.visitTime,
+          transition: visit.transition,
+          is_local: visit.isLocal,
+          categories: categories,
+          date: visit.visitTime,
+
+          // Stable per-visit identifiers (useful for dedup + sequence reconstruction)
+          visit_id: visit.visitId,
+          referring_visit_id: visit.referringVisitId,
+
+          // URL-level history item fields (useful context, low cost)
+          history_item_id: item.id,
+          last_visit_time: item.lastVisitTime,
+          visit_count: item.visitCount,
+          typed_count: item.typedCount,
+
+          // Allow-list context (which list allowed this URL)
+          allowed_by_list: allowCheck.matchedList,
+          allowed_by_list_entry: allowCheck.matchEntry
+            ? {
+                list_name: allowCheck.matchedList,
+                matched_pattern: allowCheck.matchEntry.domain,
+                matched_pattern_type: allowCheck.matchEntry.pattern_type,
+                matched_source: allowCheck.matchEntry.source,
+                matched_metadata: allowCheck.matchEntry.metadata || {}
+              }
+            : undefined,
+
+          // Filter-list context (safe: doesn't include original URL)
+          filtered: Boolean(filteredByList),
+          filtered_by_list: filteredByList,
+          filtered_by_list_entry: filterMatch
+            ? {
+                list_name: filteredByList,
+                matched_pattern: filterMatch.domain,
+                matched_pattern_type: filterMatch.pattern_type,
+                matched_source: filterMatch.source,
+                matched_metadata: filterMatch.metadata || {}
+              }
+            : undefined
+        })
+
+        collectedCount++
       }
-
-      console.log(`[webmunk-history] Collected ${collectedCount} history visits`)
-
-      // Generate top domains list if enabled
-      if (this.config.generate_top_domains) {
-        await this.generateTopDomainsList()
-      }
-
-      // Update status
-      this.status.lastCollectionTime = Date.now()
-      this.status.itemsCollected += collectedCount
-      await this.setLastFetchTime(Date.now())
-      await this.saveStatus()
-
-    } catch (error) {
-      console.error('[webmunk-history] Collection error:', error)
-      // Even on failure, record that we attempted a fetch so operators/tests can
-      // see activity and avoid "undefined" last-fetch state.
-      await this.setLastFetchTime(Date.now())
-    } finally {
-      this.status.isCollecting = false
-      await this.saveStatus()
-      console.log('[webmunk-history] Collection complete')
     }
+
+    return { collectedCount, maxVisitTime }
   }
 
   /**
