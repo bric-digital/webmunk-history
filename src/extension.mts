@@ -1,5 +1,5 @@
 import $ from 'jquery'
-import { REXExtensionModule, registerREXModule, REXUIDefinition } from '@bric/rex-core/extension'
+import { REXExtensionModule, registerREXModule, type REXUIDefinition } from '@bric/rex-core/extension'
 
 /**
  * History module extension - provides status UI for history collection
