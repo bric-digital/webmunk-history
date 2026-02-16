@@ -136,7 +136,8 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
     try {
       // Always fetch through rex-core, which owns configuration loading/storage.
       const configuration = await rexCorePlugin.fetchConfiguration() as REXConfiguration | undefined
-      const historyConfig = (configuration as { [key: string]: unknown } | undefined)?.['history'] as HistoryConfig | undefined
+      const configurationRecord = configuration as unknown as Record<string, unknown> | undefined
+      const historyConfig = configurationRecord?.['history'] as HistoryConfig | undefined
 
       if (historyConfig) {
         this.config = historyConfig
@@ -152,7 +153,7 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
         await this.saveStatus()
         console.warn('[webmunk-history] No history configuration found in rex-core configuration')
       }
-      const listConfig = (configuration as { [key: string]: unknown } | undefined)?.['lists']
+      const listConfig = configurationRecord?.['lists']
       if (listConfig !== null && listConfig !== undefined && typeof listConfig === 'object' && !Array.isArray(listConfig)) {
         listUtils.parseAndSyncLists(listConfig as Parameters<typeof listUtils.parseAndSyncLists>[0])
           .then(() => {
