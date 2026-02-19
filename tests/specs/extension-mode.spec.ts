@@ -194,13 +194,28 @@ test.describe('HistoryServiceWorkerModule — Option C (real extension)', () => 
     expect(response.isCollecting).toBe(false)
   })
 
-  test('triggerHistoryCollection runs and updates lastCollectionTime', async () => {
+  test('triggerHistoryCollection collects real browsing history', async () => {
+    // Visit a few real pages so chrome.history has something to collect.
+    const urlsToVisit = [
+      'https://bric.digital',
+      'https://keystone.com',
+      'https://northwestern.edu',
+    ]
+    for (const url of urlsToVisit) {
+      const page = await context.newPage()
+      // domcontentloaded is enough to register the visit in Chrome's history.
+      // Errors are swallowed so a slow or redirecting page doesn't fail the test.
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {})
+      await page.close()
+    }
+
+    // Give Chrome a moment to flush the visits to its history database.
+    await new Promise((r) => setTimeout(r, 500))
+
     // Config was injected in earlier tests; wait for the module to reflect it.
     await waitForConfigLoaded(serviceWorker)
 
     // Trigger a full collection cycle.
-    // The fresh user-data dir has no browsing history, so itemsCollected stays the same,
-    // but lastCollectionTime must be set to confirm the cycle ran.
     const result = await serviceWorker.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return await (self as any).__testSendMessage({ messageType: 'triggerHistoryCollection' })
@@ -216,5 +231,9 @@ test.describe('HistoryServiceWorkerModule — Option C (real extension)', () => 
 
     expect(status.isCollecting).toBe(false)
     expect(typeof status.lastCollectionTime).toBe('number')
+    // The three pages visited above must have produced at least one collected item,
+    // confirming that chrome.history.search returned real data and the full
+    // collection pipeline (search → filter → logEvent → saveStatus) ran correctly.
+    expect(status.itemsCollected).toBeGreaterThan(0)
   })
 })
