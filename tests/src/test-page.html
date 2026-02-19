@@ -34,6 +34,11 @@
     <h1>🧪 Webmunk History Test Page</h1>
     <div id="status">Loading test utilities...</div>
 
+    <!--
+      Script order matters: ESM module scripts are deferred and run in document order.
+      1. Chrome mock (inline) — must run first so chrome APIs exist when the module loads.
+      2. test-shim.bundle.js — loads the real HistoryServiceWorkerModule and EventCaptureModule.
+    -->
     <script type="module">
         // Create mock Chrome APIs for testing
         window.chrome = {
@@ -171,5 +176,11 @@
         // Set a flag that Playwright can check
         window.testUtilitiesReady = true;
     </script>
+
+    <!-- Loads the real HistoryServiceWorkerModule and EventCaptureModule.
+         Sets window.__historyShimLoaded = true when done.
+         setup() is async; wait for window.chrome.storage.local._data.webmunkHistoryStatus
+         to appear in storage before triggering collection in tests. -->
+    <script type="module" src="build/test-shim.bundle.js"></script>
 </body>
 </html>

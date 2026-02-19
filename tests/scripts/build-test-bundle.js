@@ -14,10 +14,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const srcDir = join(__dirname, '../../src')
+const testSrcDir = join(__dirname, '../src')
 const outputDir = join(__dirname, '../src/build')
+const extensionDir = join(__dirname, '../extension')
 
-// Ensure output directory exists
+// Ensure output directories exist
 await mkdir(outputDir, { recursive: true })
+await mkdir(extensionDir, { recursive: true })
 
 const modules = [
   {
@@ -34,6 +37,20 @@ const modules = [
     name: 'browser',
     input: join(srcDir, 'browser.mts'),
     output: join(outputDir, 'browser.bundle.js')
+  },
+  {
+    // Test shim: loads the real HistoryServiceWorkerModule plus an EventCaptureModule.
+    // Used by test-page.html to exercise the actual module code.
+    name: 'test-shim',
+    input: join(testSrcDir, 'test-shim.mts'),
+    output: join(outputDir, 'test-shim.bundle.js')
+  },
+  {
+    // Option-C extension service worker: loads HistoryServiceWorkerModule + message routing.
+    // Output goes into tests/extension/ so Playwright can load it as a real Chrome extension.
+    name: 'extension-sw',
+    input: join(extensionDir, 'sw-entry.mts'),
+    output: join(extensionDir, 'service-worker.bundle.js')
   }
 ]
 
