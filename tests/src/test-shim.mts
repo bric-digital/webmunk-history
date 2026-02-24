@@ -8,7 +8,7 @@
  * chrome mock has been defined on window.
  */
 import rexCorePlugin, { registerREXModule, REXServiceWorkerModule } from '@bric/rex-core/service-worker'
-import * as listUtils from '@bric/webmunk-lists'
+import * as listUtils from '@bric/rex-lists'
 import historyPlugin from '../../src/service-worker.mts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

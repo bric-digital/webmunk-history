@@ -7,8 +7,8 @@ REX module for collecting web browsing history via the `chrome.history` API.
 **rex-history** collects browsing history data for research purposes. It:
 
 - Queries browser history at configurable intervals
-- Filters URLs using allow lists and filter lists (requires **webmunk-lists** module)
-- Categorizes URLs based on category lists (requires **webmunk-lists** module)
+- Filters URLs using allow lists and filter lists (requires **rex-lists** module)
+- Categorizes URLs based on category lists (requires **rex-lists** module)
 - Optionally generates top-visited domain lists
 - Transmits data via webmunk-passive-data-kit
 
@@ -20,7 +20,7 @@ This module reads from the `history` section of the backend config.
 
 - `rex-history` reads its module configuration from rex-core (`REXConfiguration.history`).
 - It does **not** support a module-local configuration override key in storage.
-- List behavior (`allow_lists`, `filter_lists`, `category_lists`, `domain_only_lists`) uses list names from `history` config and resolves entries from the shared lists database (`@bric/webmunk-lists`).
+- List behavior (`allow_lists`, `filter_lists`, `category_lists`, `domain_only_lists`) uses list names from `history` config and resolves entries from the shared lists database (`@bric/rex-lists`).
 - As a result, user edits made through `webmunk-lists-front-end` are immediately visible to history matching for those configured list names.
 
 ### Schema
@@ -108,14 +108,14 @@ This module supports four different types of lists, each with distinct behavior:
 
 ### List References
 
-The `allow_lists`, `filter_lists`, `category_lists`, and `domain_only_lists` fields reference list names defined in the `lists` configuration section. See [webmunk-lists](https://github.com/bric-digital/webmunk-lists) for list format documentation.
+The `allow_lists`, `filter_lists`, `category_lists`, and `domain_only_lists` fields reference list names defined in the `lists` configuration section. See [rex-lists](https://github.com/bric-digital/rex-lists) for list format documentation.
 
 ## Dependencies
 
 This module requires:
 
 - **[@bric/rex-core](https://github.com/bric-digital/rex-core)** - Core REX framework (required)
-- **[@bric/webmunk-lists](https://github.com/bric-digital/webmunk-lists)** - List management and URL filtering (required)
+- **[@bric/rex-lists](https://github.com/bric-digital/rex-lists)** - List management and URL filtering (required)
 - **[@bric/webmunk-passive-data-kit](https://github.com/bric-digital/webmunk-passive-data-kit)** - Data transmission (required for data upload)
 
 ## Installation
@@ -126,7 +126,7 @@ Add to your extension's `package.json` dependencies:
 {
   "dependencies": {
     "@bric/rex-core": "github:bric-digital/rex-core#main",
-    "@bric/webmunk-lists": "github:bric-digital/webmunk-lists#main",
+    "@bric/rex-lists": "github:bric-digital/rex-lists#main",
     "@bric/webmunk-passive-data-kit": "github:bric-digital/webmunk-passive-data-kit#main",
     "@bric/rex-history": "github:bric-digital/rex-history#main"
   }

@@ -1,7 +1,7 @@
 import psl from 'psl'
 import rexCorePlugin, { REXServiceWorkerModule, registerREXModule, dispatchEvent } from '@bric/rex-core/service-worker'
 import { type REXConfiguration } from '@bric/rex-core/extension'
-import * as listUtils from '@bric/webmunk-lists'
+import * as listUtils from '@bric/rex-lists'
 
 interface HistoryConfig {
   collection_interval_minutes: number;

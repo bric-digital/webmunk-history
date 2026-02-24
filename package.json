@@ -49,7 +49,7 @@
     },
     "dependencies": {
         "@bric/rex-core": "github:bric-digital/rex-core#main",
-        "@bric/webmunk-lists": "github:bric-digital/webmunk-lists#emt_test",
+        "@bric/rex-lists": "github:bric-digital/rex-lists#emt_test",
         "jquery": "^3.7.1",
         "psl": "^1.9.0"
     }
