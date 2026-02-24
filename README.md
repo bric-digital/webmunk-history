@@ -1,10 +1,10 @@
-# webmunk-history
+# rex-history
 
-Webmunk module for collecting web browsing history via the `chrome.history` API.
+REX module for collecting web browsing history via the `chrome.history` API.
 
 ## Overview
 
-**webmunk-history** collects browsing history data for research purposes. It:
+**rex-history** collects browsing history data for research purposes. It:
 
 - Queries browser history at configurable intervals
 - Filters URLs using allow lists and filter lists (requires **webmunk-lists** module)
@@ -18,7 +18,7 @@ This module reads from the `history` section of the backend config.
 
 ### Configuration Source of Truth
 
-- `webmunk-history` reads its module configuration from rex-core (`REXConfiguration.history`).
+- `rex-history` reads its module configuration from rex-core (`REXConfiguration.history`).
 - It does **not** support a module-local configuration override key in storage.
 - List behavior (`allow_lists`, `filter_lists`, `category_lists`, `domain_only_lists`) uses list names from `history` config and resolves entries from the shared lists database (`@bric/webmunk-lists`).
 - As a result, user edits made through `webmunk-lists-front-end` are immediately visible to history matching for those configured list names.
@@ -128,7 +128,7 @@ Add to your extension's `package.json` dependencies:
     "@bric/rex-core": "github:bric-digital/rex-core#main",
     "@bric/webmunk-lists": "github:bric-digital/webmunk-lists#main",
     "@bric/webmunk-passive-data-kit": "github:bric-digital/webmunk-passive-data-kit#main",
-    "@bric/webmunk-history": "github:bric-digital/webmunk-history#main"
+    "@bric/rex-history": "github:bric-digital/rex-history#main"
   }
 }
 ```

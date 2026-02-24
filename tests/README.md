@@ -1,6 +1,6 @@
-# Webmunk History Test Suite
+# REX History Test Suite
 
-Comprehensive automated tests for the webmunk-history module.
+Comprehensive automated tests for the rex-history module.
 
 ## Table of Contents
 
