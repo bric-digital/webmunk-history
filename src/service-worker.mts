@@ -111,7 +111,7 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
 
     // Set up alarm listener
     chrome.alarms.onAlarm.addListener((alarm) => {
-      if (alarm.name === 'webmunk-history-collection') {
+      if (alarm.name === 'rex-history-collection') {
         console.log('[webmunk-history] Periodic collection triggered')
         this.collectHistory().catch((error) => {
           console.error('[webmunk-history] Collection error:', error)
@@ -173,10 +173,10 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
     if (!this.config) return
 
     // Clear any existing alarm
-    await chrome.alarms.clear('webmunk-history-collection')
+    await chrome.alarms.clear('rex-history-collection')
 
     // Create new alarm
-    await chrome.alarms.create('webmunk-history-collection', {
+    await chrome.alarms.create('rex-history-collection', {
       periodInMinutes: this.config.collection_interval_minutes,
       delayInMinutes: this.config.collection_interval_minutes
     })
@@ -454,9 +454,9 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
         const categories = await this.categorizeUrl(item.url)
 
         // Dispatch event to all modules (PDK will pick it up for upload)
-        console.log('[webmunk-history] Logging event: webmunk-history-visit')
+        console.log('[webmunk-history] Logging event: rex-history-visit')
         dispatchEvent({
-          name: 'webmunk-history-visit',
+          name: 'rex-history-visit',
           // IMPORTANT: `url` is the recorded URL (may be replaced by CATEGORY:... for filtered items)
           url: recordedUrl,
           recorded_url: recordedUrl,

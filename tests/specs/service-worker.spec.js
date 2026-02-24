@@ -209,14 +209,14 @@ test.describe('History Service Worker - Alarm Management', () => {
 
   test('should create periodic collection alarm', async ({ page }) => {
     await page.evaluate(async () => {
-      await window.chrome.alarms.create('webmunk-history-collection', {
+      await window.chrome.alarms.create('rex-history-collection', {
         periodInMinutes: 60,
         delayInMinutes: 60
       });
     });
 
     const alarm = await page.evaluate(async () => {
-      return await window.chrome.alarms.get('webmunk-history-collection');
+      return await window.chrome.alarms.get('rex-history-collection');
     });
 
     expect(alarm).toBeTruthy();
@@ -226,21 +226,21 @@ test.describe('History Service Worker - Alarm Management', () => {
   test('should clear existing alarm before creating new one', async ({ page }) => {
     // Create initial alarm
     await page.evaluate(async () => {
-      await window.chrome.alarms.create('webmunk-history-collection', {
+      await window.chrome.alarms.create('rex-history-collection', {
         periodInMinutes: 30
       });
     });
 
     // Clear and recreate
     await page.evaluate(async () => {
-      await window.chrome.alarms.clear('webmunk-history-collection');
-      await window.chrome.alarms.create('webmunk-history-collection', {
+      await window.chrome.alarms.clear('rex-history-collection');
+      await window.chrome.alarms.create('rex-history-collection', {
         periodInMinutes: 60
       });
     });
 
     const alarm = await page.evaluate(async () => {
-      return await window.chrome.alarms.get('webmunk-history-collection');
+      return await window.chrome.alarms.get('rex-history-collection');
     });
 
     expect(alarm.periodInMinutes).toBe(60);

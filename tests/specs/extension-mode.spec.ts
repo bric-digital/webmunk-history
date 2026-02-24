@@ -173,7 +173,7 @@ test.describe('HistoryServiceWorkerModule — Option C (real extension)', () => 
       const deadline = Date.now() + 5_000
       while (Date.now() < deadline) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const a = await (globalThis as any).chrome.alarms.get('webmunk-history-collection')
+        const a = await (globalThis as any).chrome.alarms.get('rex-history-collection')
         if (a) return a
         await new Promise((r) => setTimeout(r, 100))
       }

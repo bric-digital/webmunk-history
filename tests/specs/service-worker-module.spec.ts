@@ -141,12 +141,12 @@ test.describe('HistoryServiceWorkerModule — Alarm Setup', () => {
     })
 
     await page.waitForFunction(
-      () => !!(window as any).chrome.alarms._alarms['webmunk-history-collection'],
+      () => !!(window as any).chrome.alarms._alarms['rex-history-collection'],
       { timeout: 5_000 }
     )
 
     const alarm = await page.evaluate(
-      () => (window as any).chrome.alarms._alarms['webmunk-history-collection']
+      () => (window as any).chrome.alarms._alarms['rex-history-collection']
     )
     expect(alarm).toBeTruthy()
     expect(alarm.periodInMinutes).toBe(30)
@@ -169,7 +169,7 @@ test.describe('HistoryServiceWorkerModule — Alarm Setup', () => {
     await page.waitForTimeout(300)
 
     const alarm = await page.evaluate(
-      () => (window as any).chrome.alarms._alarms['webmunk-history-collection']
+      () => (window as any).chrome.alarms._alarms['rex-history-collection']
     )
     expect(alarm).toBeUndefined()
   })
@@ -245,14 +245,14 @@ test.describe('HistoryServiceWorkerModule — URL Filtering (shouldSkipUrl)', ()
     // Reset captured events before collection.
     await page.evaluate(() => { (window as any).__capturedEvents = [] })
 
-    await page.evaluate(() => { window.triggerAlarm('webmunk-history-collection') })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
     await waitForCollectionComplete(page)
 
     const events = await page.evaluate(
       () => (window as any).__capturedEvents as Record<string, unknown>[]
     )
-    // None of the non-http URLs should have produced a webmunk-history-visit event.
-    const visitEvents = events.filter((e) => e.name === 'webmunk-history-visit')
+    // None of the non-http URLs should have produced a rex-history-visit event.
+    const visitEvents = events.filter((e) => e.name === 'rex-history-visit')
     expect(visitEvents).toHaveLength(0)
   })
 
@@ -263,13 +263,13 @@ test.describe('HistoryServiceWorkerModule — URL Filtering (shouldSkipUrl)', ()
     await addHistoryItem(page, 'http://another.example.org/path', 'Another', now - 2000)
 
     await page.evaluate(() => { (window as any).__capturedEvents = [] })
-    await page.evaluate(() => { window.triggerAlarm('webmunk-history-collection') })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
     await waitForCollectionComplete(page)
 
     const events = await page.evaluate(
       () =>
         ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
-          (e) => e.name === 'webmunk-history-visit'
+          (e) => e.name === 'rex-history-visit'
         )
     )
     expect(events.length).toBeGreaterThanOrEqual(2)
@@ -305,7 +305,7 @@ test.describe('HistoryServiceWorkerModule — Collection & Event Payload', () =>
     )
 
     await page.evaluate(() => { (window as any).__capturedEvents = [] })
-    await page.evaluate(() => { window.triggerAlarm('webmunk-history-collection') })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
     await waitForCollectionComplete(page)
 
     const after = await page.evaluate(
@@ -319,19 +319,19 @@ test.describe('HistoryServiceWorkerModule — Collection & Event Payload', () =>
     await addHistoryItem(page, 'https://www.example.com', 'Example Domain', now - 500)
 
     await page.evaluate(() => { (window as any).__capturedEvents = [] })
-    await page.evaluate(() => { window.triggerAlarm('webmunk-history-collection') })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
     await waitForCollectionComplete(page)
 
     const events = await page.evaluate(
       () =>
         ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
-          (e) => e.name === 'webmunk-history-visit'
+          (e) => e.name === 'rex-history-visit'
         )
     )
 
     expect(events.length).toBeGreaterThanOrEqual(1)
     const event = events[0]!
-    expect(event.name).toBe('webmunk-history-visit')
+    expect(event.name).toBe('rex-history-visit')
     expect(typeof event.url).toBe('string')
     expect(typeof event.domain).toBe('string')
     expect(typeof event.visit_time).toBe('number')
@@ -344,13 +344,13 @@ test.describe('HistoryServiceWorkerModule — Collection & Event Payload', () =>
     await addHistoryItem(page, 'https://mail.example.co.uk/inbox', 'Mail', now - 500)
 
     await page.evaluate(() => { (window as any).__capturedEvents = [] })
-    await page.evaluate(() => { window.triggerAlarm('webmunk-history-collection') })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
     await waitForCollectionComplete(page)
 
     const events = await page.evaluate(
       () =>
         ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
-          (e) => e.name === 'webmunk-history-visit' && (e.url as string).includes('example.co.uk')
+          (e) => e.name === 'rex-history-visit' && (e.url as string).includes('example.co.uk')
         )
     )
 
@@ -369,7 +369,7 @@ test.describe('HistoryServiceWorkerModule — Collection & Event Payload', () =>
     await addHistoryItem(page, 'https://www.example.com', 'Example', now - 500)
 
     await page.evaluate(() => { (window as any).__capturedEvents = [] })
-    await page.evaluate(() => { window.triggerAlarm('webmunk-history-collection') })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
 
     // Give the module time to react (it should bail out quickly with NO_IDENTIFIER).
     await page.waitForTimeout(500)
@@ -377,7 +377,7 @@ test.describe('HistoryServiceWorkerModule — Collection & Event Payload', () =>
     const events = await page.evaluate(
       () =>
         ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
-          (e) => e.name === 'webmunk-history-visit'
+          (e) => e.name === 'rex-history-visit'
         )
     )
     expect(events).toHaveLength(0)
