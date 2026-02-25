@@ -21,7 +21,7 @@ This module reads from the `history` section of the backend config.
 - `rex-history` reads its module configuration from rex-core (`REXConfiguration.history`).
 - It does **not** support a module-local configuration override key in storage.
 - List behavior (`allow_lists`, `filter_lists`, `category_lists`, `domain_only_lists`) uses list names from `history` config and resolves entries from the shared lists database (`@bric/rex-lists`).
-- As a result, user edits made through `webmunk-lists-front-end` are immediately visible to history matching for those configured list names.
+- As a result, user edits made through `rex-lists-front-end` are immediately visible to history matching for those configured list names.
 
 ### Schema
 
