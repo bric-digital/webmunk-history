@@ -376,7 +376,7 @@ Make sure you're in the `webmunk-history` directory and that `src/` contains the
 
 After verifying tests pass:
 
-1. Integrate into webmunk-dev-extension for integration testing
+1. Integrate into rex-dev-extension for integration testing
 2. Test with real Chrome extension environment
 3. Add performance testing with larger datasets
 4. Test cross-browser compatibility (Firefox, Edge)

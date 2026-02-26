@@ -17007,7 +17007,7 @@ var REXCoreIdentifierExtensionModule = class extends REXExtensionModule {
 };
 registerREXModule2(new REXCoreIdentifierExtensionModule());
 
-// node_modules/@bric/webmunk-lists/src/list-utilities.mts
+// node_modules/@bric/rex-lists/src/list-utilities.mts
 function normalizeLeadingWww(host) {
   return host.toLowerCase().replace(/^www\./, "");
 }
@@ -17089,23 +17089,6 @@ async function getListEntries(listName) {
     };
   });
 }
-async function deleteListEntry(id) {
-  const db = await getDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, "readwrite");
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.delete(id);
-    transaction.oncomplete = () => {
-      resolve();
-    };
-    transaction.onerror = () => {
-      reject(new Error(`Failed to delete entry (tx): ${transaction.error?.message}`));
-    };
-    request.onerror = () => {
-      reject(new Error(`Failed to delete entry: ${request.error?.message}`));
-    };
-  });
-}
 async function deleteAllEntriesInList(listName, sourceFilter) {
   const db = await getDatabase();
   return new Promise((resolve, reject) => {
@@ -17172,12 +17155,26 @@ async function matchDomainAgainstList(url, listName) {
 }
 async function bulkCreateListEntries(entries) {
   const db = await getDatabase();
+  const uniqueKeys = /* @__PURE__ */ new Set();
+  const duplicatesInArray = [];
+  entries.forEach((entry, index) => {
+    const key = `${entry.list_name}:${entry.pattern_type}:${entry.domain}`;
+    if (uniqueKeys.has(key)) {
+      duplicatesInArray.push({ index, key });
+    }
+    uniqueKeys.add(key);
+  });
+  if (duplicatesInArray.length > 0) {
+    console.error("[list-utilities] Duplicate entries detected in bulk insert array:", duplicatesInArray);
+    return Promise.reject(new Error(`Duplicate entries in array: ${duplicatesInArray.map((d) => `[${d.index}]${d.key}`).join(", ")}`));
+  }
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, "readwrite");
     const store = transaction.objectStore(STORE_NAME);
     const ids = [];
     let completed = 0;
-    entries.forEach((entry) => {
+    let skipped = 0;
+    entries.forEach((entry, index) => {
       const entryWithTimestamps = {
         ...entry,
         metadata: {
@@ -17190,17 +17187,63 @@ async function bulkCreateListEntries(entries) {
       request.onsuccess = () => {
         ids.push(request.result);
         completed++;
-        if (completed === entries.length) {
+        if (completed + skipped === entries.length) {
+          if (skipped > 0) {
+            console.warn(`[list-utilities] Bulk insert completed with ${skipped} skipped duplicates`);
+          }
           resolve(ids);
         }
       };
-      request.onerror = () => {
-        reject(new Error(`Failed to create bulk entry: ${request.error?.message}`));
+      request.onerror = (event) => {
+        if (request.error?.name === "ConstraintError") {
+          event.preventDefault();
+          skipped++;
+          console.warn(
+            `[list-utilities] Skipping duplicate entry at index ${index} (${entry.list_name}:${entry.pattern_type}:${entry.domain})`
+          );
+          if (completed + skipped === entries.length) {
+            console.warn(`[list-utilities] Bulk insert completed with ${skipped} skipped duplicates`);
+            resolve(ids);
+          }
+        } else {
+          const errorDetails = {
+            list_name: entry.list_name,
+            pattern_type: entry.pattern_type,
+            domain: entry.domain,
+            source: entry.source,
+            index,
+            error: request.error?.message
+          };
+          console.error("[list-utilities] Bulk insert failed at entry:", errorDetails);
+          reject(new Error(`Failed to create bulk entry at index ${index} (${entry.list_name}:${entry.pattern_type}:${entry.domain}): ${request.error?.message}`));
+        }
       };
     });
     if (entries.length === 0) {
       resolve([]);
     }
+  });
+}
+async function bulkDeleteListEntries(ids) {
+  if (ids.length === 0) {
+    return Promise.resolve();
+  }
+  const db = await getDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    transaction.oncomplete = () => {
+      resolve();
+    };
+    transaction.onerror = () => {
+      reject(new Error(`Failed to delete entries (tx): ${transaction.error?.message}`));
+    };
+    ids.forEach((id) => {
+      const request = store.delete(id);
+      request.onerror = () => {
+        reject(new Error(`Failed to delete entry ${id}: ${request.error?.message}`));
+      };
+    });
   });
 }
 async function parseAndSyncLists(listsConfig) {
@@ -17222,8 +17265,14 @@ async function parseAndSyncLists(listsConfig) {
 }
 async function mergeBackendList(listName, entries) {
   console.log(`[list-utilities] Merging backend list: ${listName}`);
-  await deleteAllEntriesInList(listName, "backend");
-  console.log(`[list-utilities] Cleared existing backend entries for: ${listName}`);
+  try {
+    await deleteAllEntriesInList(listName, "backend");
+    console.log(`[list-utilities] Cleared existing backend entries for: ${listName}`);
+  } catch (error) {
+    console.error(`[list-utilities] Failed to clear backend entries for ${listName}:`, error);
+    throw error;
+  }
+  const entriesToDelete = [];
   for (const entry of entries) {
     try {
       const domain = entry?.domain;
@@ -17232,13 +17281,22 @@ async function mergeBackendList(listName, entries) {
       if (!patternType) continue;
       const existing = await findListEntryByPattern(listName, patternType, domain);
       if (existing?.id !== void 0) {
-        await deleteListEntry(existing.id);
+        entriesToDelete.push(existing.id);
         console.log(
-          `[list-utilities] Removed conflicting existing entry for ${listName}:${patternType}:${domain} (source=${existing.source ?? "unknown"})`
+          `[list-utilities] Found conflicting entry for ${listName}:${patternType}:${domain} (source=${existing.source ?? "unknown"}) - will delete`
         );
       }
     } catch (error) {
-      console.error(`[list-utilities] Failed resolving conflict for list ${listName}:`, error);
+      console.error(`[list-utilities] Failed checking conflict for list ${listName}:`, error);
+    }
+  }
+  if (entriesToDelete.length > 0) {
+    try {
+      await bulkDeleteListEntries(entriesToDelete);
+      console.log(`[list-utilities] Deleted ${entriesToDelete.length} conflicting entries for ${listName}`);
+    } catch (error) {
+      console.error(`[list-utilities] Failed to delete conflicting entries:`, error);
+      throw new Error(`Failed to clear conflicts before sync: ${error instanceof Error ? error.message : "unknown"}`);
     }
   }
   const newEntries = [];
@@ -17415,7 +17473,7 @@ var _HistoryServiceWorkerModule = class _HistoryServiceWorkerModule extends REXS
       console.log("[webmunk-history] Configuration loaded but no identifier set - collection will start once identifier is provided");
     }
     globalThis.chrome.alarms.onAlarm.addListener((alarm) => {
-      if (alarm.name === "webmunk-history-collection") {
+      if (alarm.name === "rex-history-collection") {
         console.log("[webmunk-history] Periodic collection triggered");
         this.collectHistory().catch((error) => {
           console.error("[webmunk-history] Collection error:", error);
@@ -17457,8 +17515,8 @@ var _HistoryServiceWorkerModule = class _HistoryServiceWorkerModule extends REXS
   }
   async setupAlarm() {
     if (!this.config) return;
-    await globalThis.chrome.alarms.clear("webmunk-history-collection");
-    await globalThis.chrome.alarms.create("webmunk-history-collection", {
+    await globalThis.chrome.alarms.clear("rex-history-collection");
+    await globalThis.chrome.alarms.create("rex-history-collection", {
       periodInMinutes: this.config.collection_interval_minutes,
       delayInMinutes: this.config.collection_interval_minutes
     });
@@ -17620,56 +17678,58 @@ var _HistoryServiceWorkerModule = class _HistoryServiceWorkerModule extends REXS
           }
         } catch {
         }
-        const allowCheck = await this.checkAllowLists(item.url);
         let recordedUrl = item.url;
         let recordedTitle = item.title || "";
         let filteredByList;
         let filterMatch;
-        if (!allowCheck.allowed) {
-          recordedUrl = "CATEGORY:NOT_ON_ALLOWLIST";
-          recordedTitle = "";
-          registeredDomain = "";
-          await this.maybeLogFilteredUrlDebug(
-            item.url,
-            recordedUrl,
-            "NOT_ON_ALLOWLIST",
-            void 0,
-            {
-              visit_id: visit.visitId,
-              visit_time: visit.visitTime,
-              history_item_id: item.id
-            }
-          );
+        const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
+          visit_id: visit.visitId,
+          visit_time: visit.visitTime,
+          history_item_id: item.id
+        });
+        let allowCheck;
+        if (domainOnlyResult.filteredByList) {
+          recordedUrl = "DOMAIN ONLY";
+          recordedTitle = "DOMAIN ONLY";
+          filteredByList = domainOnlyResult.filteredByList;
+          filterMatch = domainOnlyResult.filterMatch;
+          allowCheck = { allowed: true };
         } else {
-          const filterResult = await this.applyFilterLists(item.url, {
-            visit_id: visit.visitId,
-            visit_time: visit.visitTime,
-            history_item_id: item.id
-          });
-          recordedUrl = filterResult.recordedUrl;
-          filteredByList = filterResult.filteredByList;
-          filterMatch = filterResult.filterMatch;
-          if (recordedUrl.startsWith("CATEGORY:")) {
+          allowCheck = await this.checkAllowLists(item.url);
+          if (!allowCheck.allowed) {
+            recordedUrl = "CATEGORY:NOT_ON_ALLOWLIST";
             recordedTitle = "";
             registeredDomain = "";
+            await this.maybeLogFilteredUrlDebug(
+              item.url,
+              recordedUrl,
+              "NOT_ON_ALLOWLIST",
+              void 0,
+              {
+                visit_id: visit.visitId,
+                visit_time: visit.visitTime,
+                history_item_id: item.id
+              }
+            );
           } else {
-            const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
+            const filterResult = await this.applyFilterLists(item.url, {
               visit_id: visit.visitId,
               visit_time: visit.visitTime,
               history_item_id: item.id
             });
-            if (domainOnlyResult.filteredByList) {
-              recordedUrl = "DOMAIN ONLY";
-              recordedTitle = "DOMAIN ONLY";
-              filteredByList = domainOnlyResult.filteredByList;
-              filterMatch = domainOnlyResult.filterMatch;
+            recordedUrl = filterResult.recordedUrl;
+            filteredByList = filterResult.filteredByList;
+            filterMatch = filterResult.filterMatch;
+            if (recordedUrl.startsWith("CATEGORY:")) {
+              recordedTitle = "";
+              registeredDomain = "";
             }
           }
         }
         const categories = await this.categorizeUrl(item.url);
-        console.log("[webmunk-history] Logging event: webmunk-history-visit");
+        console.log("[webmunk-history] Logging event: rex-history-visit");
         dispatchEvent({
-          name: "webmunk-history-visit",
+          name: "rex-history-visit",
           // IMPORTANT: `url` is the recorded URL (may be replaced by CATEGORY:... for filtered items)
           url: recordedUrl,
           recorded_url: recordedUrl,

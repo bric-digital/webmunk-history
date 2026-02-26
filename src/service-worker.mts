@@ -393,59 +393,66 @@ class HistoryServiceWorkerModule extends REXServiceWorkerModule {
           // Keep default 'not available' for invalid URLs
         }
 
-        // Apply allow_lists: if configured, only collect URLs matching an allow-list.
-        // If not allowed, create a dummy record (like blocklist behavior).
-        const allowCheck = await this.checkAllowLists(item.url)
         let recordedUrl = item.url
         let recordedTitle = item.title || ''
         let filteredByList: string | undefined
         let filterMatch: listUtils.ListEntry | undefined
 
-        if (!allowCheck.allowed) {
-          // URL not on allowlist - create dummy record with category placeholder
-          recordedUrl = 'CATEGORY:NOT_ON_ALLOWLIST'
-          recordedTitle = ''
-          registeredDomain = ''
-          // Log debug event if enabled (dev-only)
-          await this.maybeLogFilteredUrlDebug(
-            item.url,
-            recordedUrl,
-            'NOT_ON_ALLOWLIST',
-            undefined,
-            {
-              visit_id: visit.visitId,
-              visit_time: visit.visitTime,
-              history_item_id: item.id
-            }
-          )
-        } else {
-          // Apply filter_lists to produce a privacy-preserving recorded URL (but still upload the visit).
-          const filterResult = await this.applyFilterLists(item.url, {
-            visit_id: visit.visitId,
-            visit_time: visit.visitTime,
-            history_item_id: item.id
-          })
-          recordedUrl = filterResult.recordedUrl
-          filteredByList = filterResult.filteredByList
-          filterMatch = filterResult.filterMatch
+        // Apply domain_only_lists FIRST: takes precedence over allow_lists.
+        // URLs on a domain_only_list are always collected at domain resolution,
+        // regardless of allow_list membership.
+        const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
+          visit_id: visit.visitId,
+          visit_time: visit.visitTime,
+          history_item_id: item.id
+        })
 
-          // Privacy: if we masked the URL, mask the title and domain too.
-          if (recordedUrl.startsWith('CATEGORY:')) {
+        let allowCheck: { allowed: boolean; matchedList?: string; matchEntry?: listUtils.ListEntry }
+
+        if (domainOnlyResult.filteredByList) {
+          recordedUrl = 'DOMAIN ONLY'
+          recordedTitle = 'DOMAIN ONLY'
+          filteredByList = domainOnlyResult.filteredByList
+          filterMatch = domainOnlyResult.filterMatch
+          allowCheck = { allowed: true }
+          // registeredDomain stays as-is (domain preserved — that's the point of domain_only)
+        } else {
+          // Apply allow_lists: if configured, only collect URLs matching an allow-list.
+          // If not allowed, create a dummy record (like blocklist behavior).
+          allowCheck = await this.checkAllowLists(item.url)
+
+          if (!allowCheck.allowed) {
+            // URL not on allowlist - create dummy record with category placeholder
+            recordedUrl = 'CATEGORY:NOT_ON_ALLOWLIST'
             recordedTitle = ''
             registeredDomain = ''
+            // Log debug event if enabled (dev-only)
+            await this.maybeLogFilteredUrlDebug(
+              item.url,
+              recordedUrl,
+              'NOT_ON_ALLOWLIST',
+              undefined,
+              {
+                visit_id: visit.visitId,
+                visit_time: visit.visitTime,
+                history_item_id: item.id
+              }
+            )
           } else {
-            // Apply domain_only_lists: if matched, replace URL/title with DOMAIN ONLY but keep domain
-            const domainOnlyResult = await this.applyDomainOnlyLists(item.url, {
+            // Apply filter_lists to produce a privacy-preserving recorded URL (but still upload the visit).
+            const filterResult = await this.applyFilterLists(item.url, {
               visit_id: visit.visitId,
               visit_time: visit.visitTime,
               history_item_id: item.id
             })
-            if (domainOnlyResult.filteredByList) {
-              recordedUrl = 'DOMAIN ONLY'
-              recordedTitle = 'DOMAIN ONLY'
-              filteredByList = domainOnlyResult.filteredByList
-              filterMatch = domainOnlyResult.filterMatch
-              // registeredDomain stays as-is
+            recordedUrl = filterResult.recordedUrl
+            filteredByList = filterResult.filteredByList
+            filterMatch = filterResult.filterMatch
+
+            // Privacy: if we masked the URL, mask the title and domain too.
+            if (recordedUrl.startsWith('CATEGORY:')) {
+              recordedTitle = ''
+              registeredDomain = ''
             }
           }
         }

@@ -279,6 +279,141 @@ test.describe('HistoryServiceWorkerModule — URL Filtering (shouldSkipUrl)', ()
   })
 })
 
+test.describe('HistoryServiceWorkerModule — Domain-Only List Behavior', () => {
+  /** Set up config with allow_lists + domain_only_lists and trigger module reload. */
+  async function setupDomainOnlyConfig(
+    page: import('@playwright/test').Page,
+    overrides: Record<string, unknown> = {}
+  ) {
+    await seedConfigAndIdentifier(page, {
+      allow_lists: ['study-sites'],
+      filter_lists: [],
+      domain_only_lists: ['domain-only-sites'],
+      category_lists: [],
+      ...overrides
+    })
+    await page.evaluate(async () => {
+      await window.chrome.storage.local.set(
+        (window as any).chrome.storage.local._data
+      )
+    })
+    await page.waitForFunction(
+      () =>
+        (window as any).chrome.storage.local._data.webmunkHistoryStatus?.configSource === 'server',
+      { timeout: 5_000 }
+    )
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/test-page.html')
+    await waitForModuleSetup(page)
+  })
+
+  test('domain-only list URL records as "DOMAIN ONLY" even when not on allow_list', async ({ page }) => {
+    const now = Date.now()
+    await setupDomainOnlyConfig(page)
+
+    // Populate domain-only list. study-sites has no entries, so facebook.com fails allow_list check.
+    await page.evaluate(async () => {
+      await (window as any).__listUtils.bulkCreateListEntries([{
+        list_name: 'domain-only-sites',
+        domain: 'facebook.com',
+        pattern_type: 'domain',
+        source: 'server',
+        metadata: {}
+      }])
+    })
+
+    await addHistoryItem(page, 'https://www.facebook.com/profile', 'Facebook Profile', now - 500)
+    await page.evaluate(() => { (window as any).__capturedEvents = [] })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
+    await waitForCollectionComplete(page)
+
+    const events = await page.evaluate(
+      () =>
+        ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
+          (e) => e.name === 'rex-history-visit'
+        )
+    )
+    expect(events.length).toBeGreaterThanOrEqual(1)
+    const event = events[0]!
+    expect(event.url).toBe('DOMAIN ONLY')
+    expect(event.recorded_url).toBe('DOMAIN ONLY')
+  })
+
+  test('domain-only list URL preserves domain field', async ({ page }) => {
+    const now = Date.now()
+    await setupDomainOnlyConfig(page)
+
+    await page.evaluate(async () => {
+      await (window as any).__listUtils.bulkCreateListEntries([{
+        list_name: 'domain-only-sites',
+        domain: 'facebook.com',
+        pattern_type: 'domain',
+        source: 'server',
+        metadata: {}
+      }])
+    })
+
+    await addHistoryItem(page, 'https://www.facebook.com/profile', 'Facebook Profile', now - 500)
+    await page.evaluate(() => { (window as any).__capturedEvents = [] })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
+    await waitForCollectionComplete(page)
+
+    const events = await page.evaluate(
+      () =>
+        ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
+          (e) => e.name === 'rex-history-visit'
+        )
+    )
+    expect(events.length).toBeGreaterThanOrEqual(1)
+    const event = events[0]!
+    expect(event.domain).toBe('facebook.com')
+  })
+
+  test('domain-only list URL gets categories populated when also in category list', async ({ page }) => {
+    const now = Date.now()
+    await setupDomainOnlyConfig(page, { category_lists: ['social-media-categories'] })
+
+    await page.evaluate(async () => {
+      await (window as any).__listUtils.bulkCreateListEntries([
+        {
+          list_name: 'domain-only-sites',
+          domain: 'facebook.com',
+          pattern_type: 'domain',
+          source: 'server',
+          metadata: {}
+        },
+        {
+          list_name: 'social-media-categories',
+          domain: 'facebook.com',
+          pattern_type: 'domain',
+          source: 'server',
+          metadata: { category: 'social-media' }
+        }
+      ])
+    })
+
+    await addHistoryItem(page, 'https://www.facebook.com/profile', 'Facebook Profile', now - 500)
+    await page.evaluate(() => { (window as any).__capturedEvents = [] })
+    await page.evaluate(() => { window.triggerAlarm('rex-history-collection') })
+    await waitForCollectionComplete(page)
+
+    const events = await page.evaluate(
+      () =>
+        ((window as any).__capturedEvents as Record<string, unknown>[]).filter(
+          (e) => e.name === 'rex-history-visit'
+        )
+    )
+    expect(events.length).toBeGreaterThanOrEqual(1)
+    const event = events[0]!
+    expect(event.url).toBe('DOMAIN ONLY')
+    expect(event.domain).toBe('facebook.com')
+    expect(Array.isArray(event.categories)).toBe(true)
+    expect((event.categories as string[])).toContain('social-media')
+  })
+})
+
 test.describe('HistoryServiceWorkerModule — Collection & Event Payload', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/test-page.html')
